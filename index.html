@@ -1,0 +1,278 @@
+<html>
+<head>
+    <script
+            src="https://code.jquery.com/jquery-3.7.1.min.js"
+            integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo="
+            crossorigin="anonymous"></script>
+    <link rel="stylesheet" href="/styles.css"/>
+
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL"
+            crossorigin="anonymous"></script>
+
+
+    <!-- Latest compiled and minified JavaScript -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@3.4.1/dist/js/bootstrap.min.js"
+            integrity="sha384-aJ21OjlMXNL5UyIl/XNwTMqvzeRMZH2w8c5cRVpzpU8Y5bApTppSuUkhZXN0VxHd"
+            crossorigin="anonymous"></script>
+</head>
+
+<body>
+<div class="container d-grid gap-3">
+    <div class="page-header">
+        <h1>Activity Report Assistant <small class="text-muted">here to help you fill in your reports !</small></h1>
+    </div>
+
+    <div class="d-flex flex-row-reverse">
+        <button class="btn btn-outline-primary ms-1" type="button" onClick="restart()">
+            Reset Conversation
+        </button>
+
+        <button class="btn btn-outline-primary ms-1" type="button" data-bs-toggle="collapse" data-bs-target="#context"
+                aria-expanded="false" aria-controls="context">
+            Show Context
+        </button>
+
+    </div>
+
+    <div class="card">
+        <div class="context-header card-header">
+            Context
+        </div>
+        <div class="collapse card-body" id="context">
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            Message Board
+        </div>
+        <div class="card-body" id="board">
+        </div>
+    </div>
+
+    <div class="input-group mb-3">
+        <div class="input-group-prepend">
+            <span class="input-group-text" id="basic-addon1">&gt;</span>
+        </div>
+        <input id="prompt" onkeydown="keyHandle(event)" type="text" class="form-control" placeholder="Input Text"
+               aria-label="Input Text" aria-describedby="basic-addon1">
+        <div class="input-group-append">
+            <button class="btn btn-outline-primary" onClick="send()" type="button">Send</button>
+        </div>
+    </div>
+
+    <script>
+      const socket = io("http://localhost:5000");
+      const messages = [];
+      let context = [];
+      const promp = document.getElementById("prompt");
+
+      const keyHandle = () => {
+        if (event.keyCode == 13 && event.ctrlKey) {
+          send();
+        }
+      }
+
+      console.log("Prompt is", promp);
+
+      socket.on("assistant-message", (data) => {
+        console.log("assistant message received", data);
+        messages.push({role: "assistant", "content": data.content})
+        updateBoard("board", messages);
+      });
+
+      socket.on("system-confirm", (data) => {
+        console.log("confirm request received", data);
+        messages.push({
+          role: "system",
+          "action": data.function.name,
+          content: data.content,
+          function: JSON.parse(data.function.arguments),
+          tool_id: data.tool_id
+        })
+        updateBoard("board", messages);
+      });
+
+      socket.on("system-message", (data) => {
+        console.log("system message received", data);
+        messages.push({role: "system", "content": data.data.content})
+        updateBoard("board", messages);
+      });
+
+      socket.on("system-context", (data) => {
+        console.log("Received new context", data);
+
+        Array.prototype.push.apply(context, data);
+        updateBoard("context", context)
+      });
+
+      const restart = () => {
+        context = []
+        updateBoard("context", context)
+        socket.emit("restart-conversation");
+      }
+
+      const send = () => {
+        const text = promp.value;
+        console.log("Sending", text);
+
+        socket.emit("client-message", text);
+        messages.push({role: "user", "content": text})
+        console.log("Messages", messages);
+        updateBoard("board", messages);
+        promp.value = "";
+      }
+
+      const confirm = (element, tool_id) => {
+        let startDate = document.querySelector(`div#${tool_id} .date-input.start`);
+        let endDate = document.querySelector(`div#${tool_id} .date-input.end`);
+
+        let confirmMessage;
+
+        if (startDate && endDate) {
+          let dateObj = {date_start: startDate.value, date_end: endDate.value};
+          confirmMessage = {tool_id: tool_id, data: dateObj};
+        } else {
+          confirmMessage = {tool_id: tool_id, data: ''}
+        }
+
+        console.log("sending confirm message to server", confirmMessage);
+
+        socket.emit("confirm-message", confirmMessage);
+        element.disabled = true;
+      }
+
+      const onDate = () => {
+        if (document.getElementById('start').value && document.getElementById('start').value) {
+          document.getElementById('date-confirm').disabled = false;
+        }
+      }
+
+      const updateBoard = (id, items) => {
+        const board = document.getElementById(id);
+
+        for (const message of items) {
+          if (message.wasShown) {
+            continue;
+          }
+
+          if (message.content) {
+            let div = document.createElement("div");
+            let bolded = document.createElement("b");
+            bolded.textContent = message.role;
+            let text = document.createTextNode(`: ${message.content}`);
+
+            div.appendChild(bolded);
+            div.appendChild(text);
+
+            board.appendChild(div);
+          }
+
+          if (message.action) {
+            var actionDiv = document.createElement('div');
+            actionDiv.id = message.tool_id;
+
+            if (message.action === 'prompt_date') {
+              // Create the first div for Start date
+              var divStart = document.createElement('div');
+
+              // Create label for Start date
+              var labelStart = document.createElement('label');
+              labelStart.className = 'date-label';
+              labelStart.setAttribute('for', 'start');
+              labelStart.textContent = 'Start date:';
+
+              // Create input for Start date
+              var inputStart = document.createElement('input');
+              inputStart.className = 'date-input start';
+              inputStart.type = 'date';
+              inputStart.name = 'start';
+              // inputStart.addEventListener('change', function() {
+              //   onDate(this);
+              // });
+
+              // Append label and input to the first div
+              divStart.appendChild(labelStart);
+              divStart.appendChild(inputStart);
+              actionDiv.append(divStart)
+
+
+              // Create the second div for End date
+              var divEnd = document.createElement('div');
+
+              // Create label for End date
+              var labelEnd = document.createElement('label');
+              labelEnd.className = 'date-label';
+              labelEnd.setAttribute('for', 'end');
+              labelEnd.textContent = 'End date:';
+
+              // Create input for End date
+              var inputEnd = document.createElement('input');
+              inputEnd.className = 'date-input end';
+              inputEnd.type = 'date';
+              inputEnd.name = 'end';
+
+              // Append label and input to the second div
+              divEnd.appendChild(labelEnd);
+              divEnd.appendChild(inputEnd);
+              actionDiv.append(divEnd)
+
+              // Append the second div to the body
+
+              // Create the button
+              var button = document.createElement('button');
+              button.className = 'btn btn-warning';
+              // button.disabled = true;
+              button.id = 'date-confirm';
+              button.textContent = 'Confirm';
+              button.id = message.tool_id;
+              button.addEventListener('click', function () {
+                confirm(this, message.tool_id);
+              });
+
+              // Append the button to the body
+              actionDiv.appendChild(button);
+            } else {
+              var alertDiv = document.createElement("div");
+              alertDiv.classList.add("alert", "alert-primary");
+              alertDiv.setAttribute("role", "alert");
+
+              alertDiv.appendChild(document.createTextNode(`${message.role}: the assistant wants to perform the following action:`));
+              alertDiv.appendChild(document.createElement("div")).innerHTML = `<b>action</b>: ${message.action}`;
+              alertDiv.appendChild(document.createElement("div")).innerHTML = `<b>data</b>: ${JSON.stringify(message.function)}`;
+              alertDiv.appendChild(document.createElement("div")).innerHTML = `<b>tool id</b>: ${message.tool_id}`;
+
+              // Create the confirm button
+              var confirmButton = document.createElement("button");
+              confirmButton.classList.add("btn", "btn-warning");
+              confirmButton.id = message.tool_id;
+              confirmButton.innerHTML = "confirm";
+
+              // Add a click event listener to the confirm button
+              confirmButton.addEventListener("click", function () {
+                confirm(this, message.tool_id);
+              });
+
+              // Append the confirm button to the alert div
+              alertDiv.appendChild(document.createElement("div").appendChild(confirmButton));
+
+              actionDiv.appendChild(alertDiv)
+            }
+            board.appendChild(actionDiv);
+          }
+          message.wasShown = true;
+        }
+
+        window.scrollTo(0, document.body.scrollHeight);
+      }
+    </script>
+</div>
+</body>
+</html>
+
