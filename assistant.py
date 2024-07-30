@@ -4,24 +4,28 @@ import sys
 import pprint
 import handlers
 from llama_cpp.llama_tokenizer import LlamaHFTokenizer
+from openai import OpenAI
 
 pp = pprint.PrettyPrinter(indent=2)
 
 
 class Assistant:
     def __init__(self, init_context):
+        self.client = OpenAI(base_url="http://localhost:8000/v1", api_key="sk-xxx")
+
         json_text = open("functions.json", "r").read()
 
         self.functions = json.loads(json_text)
 
-        self.llm = Llama(
-            model_path="models/functionary-small-v2.4.Q4_0.gguf",
-            n_ctx=4096,
-            n_gpu_layers=35,
-            chat_format="functionary-v2",
-            tokenizer=LlamaHFTokenizer.from_pretrained(
-                "meetkai/functionary-small-v2.4-GGUF"),
-            verbose=True)
+        #self.llm = Llama(
+        #        model_path="models/Meta-Llama-3.1-8B-Instruct-Q5_K_M.gguf",
+        #        n_ctx=4096,
+        #        n_gpu_layers=35,
+        #        chat_format="llama-3",
+        #        tokenizer=LlamaHFTokenizer.from_pretrained(
+        #            "meta-llama/Meta-Llama-3.1-8B-Instruct"),
+        #        verbose=True)
+
 
         self.function_calls = {}
         self.init_context = init_context
@@ -34,15 +38,17 @@ class Assistant:
     def run_inference(self):
         all_messages = list(self.messages)
 
-        result = self.llm.create_chat_completion(
-            messages=all_messages,
-            tools=self.functions,
-            tool_choice="auto",
-        )
+        result = self.client.chat.completions.create(
+                messages=all_messages,
+                model="functionary-2.5",
+                tools=self.functions,
+                tool_choice="auto",
+                )
 
-        print(result['choices'][0]['message'])
+        print(f"****Entire result is {result}")
+        print(result.choices[0].message)
 
-        return result['choices'][0]['message']
+        return result.choices[0].message
 
     def confirm(self, func_id, data=""):
         func_call = self.function_calls[func_id]
@@ -74,7 +80,7 @@ class Assistant:
                 result = data
 
         # self.messages.append(
-        #     {"role": "tool", "tool_call_id": func_id, "name": func_name, "content": result})
+                #     {"role": "tool", "tool_call_id": func_id, "name": func_name, "content": result})
         self.messages.append({"role": "function", "tool_call_id": func_id, "name": func_name, "content": str(result)})
 
         del self.function_calls[func_id]
@@ -90,7 +96,10 @@ class Assistant:
         print("***Inference", inference)
         pp.pprint(self.messages)
 
-        tool_calls = inference['tool_calls']
+        tool_calls = None
+
+        if 'tool_calls' in inference:
+            tool_calls = inference['tool_calls']
 
         if tool_calls:
             for tool_call in tool_calls:
@@ -106,8 +115,8 @@ class Assistant:
                 else:
                     print("Message needs validation")
                     send_client_callback(
-                        {"role": "system-confirm", "content": inference["content"], "function": tool_call["function"],
-                         "tool_id": tool_id})
+                            {"role": "system-confirm", "content": inference["content"], "function": tool_call["function"],
+                             "tool_id": tool_id})
         else:
             print("No tool calls")
             send_client_callback(inference)

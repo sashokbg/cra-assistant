@@ -86,6 +86,7 @@
             "description": "Their last name. Example Smith"
           },
           "role": {
+            "type": "string",
             "enum": [
               "admin",
               "user"
@@ -193,6 +194,7 @@
           "work_time": {
             "description": "The amount of time to report in percents of the day. Example 0, 25, 50, 75 or 100. ",
             "default": 100,
+            "type": "number",
             "enum": [
               0,
               25,
@@ -240,6 +242,7 @@
             ]
           },
           "reason": {
+            "type": "string",
             "enum": [
               "RTT",
               "Conges",
