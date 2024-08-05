@@ -44,6 +44,7 @@ class Assistant:
         return result.choices[0].message
 
     def confirm(self, func_id, data=""):
+        print(f"The user confirms, function id {func_id}")
         func_call = self.function_calls[func_id]
         func_name = func_call.function.name
         func_param = func_call.function.arguments

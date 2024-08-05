@@ -3,7 +3,7 @@
     "type": "function",
     "function": {
       "name": "prompt_date",
-      "description": "If you did not manage to properly understand the dates for the user activity, use this function to show a datepicker and let them choose the dates. The function returns activity start and end dates.",
+      "description": "This function can be used as a last resort if you are unable to understand the period the user wishes to report for. The function returns start and end date for the report period.",
       "parameters": {
         "type": "object",
         "properties": {}
