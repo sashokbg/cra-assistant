@@ -24,6 +24,7 @@ class Assistant:
         self.functions = json.loads(json_text)
         self.function_calls = {}
         self.init_context = init_context
+        self.waiting_confirmation = []
 
         self.init()
 
@@ -73,6 +74,8 @@ class Assistant:
 
         # self.messages.append(
         #     {"role": "tool", "tool_call_id": func_id, "name": func_name, "content": result})
+        self.waiting_confirmation = []
+
         self.messages.append({
             "role": "tool",
             "tool_call_id": func_id,
@@ -83,9 +86,16 @@ class Assistant:
 
     def generate_message(self, send_client_callback, user_input=None):
         if user_input is not None:
-            self.messages.append({"role": "user", "content": user_input})
+            if self.waiting_confirmation:
+                print("User has aborted")
+                for tool_call in self.waiting_confirmation:
+                    self.messages.append({
+                        "role": "tool",
+                        "tool_call_id": tool_call.id,
+                        "name": tool_call.function.name,
+                        "content": "The user has aborted this operation"})
 
-        pp.pprint(self.messages)
+            self.messages.append({"role": "user", "content": user_input})
 
         message = self.run_inference()
 
@@ -95,6 +105,7 @@ class Assistant:
 
         if message.tool_calls and len(message.tool_calls) > 0:
             tool_calls = message.tool_calls
+            self.waiting_confirmation = message.tool_calls
 
         if tool_calls:
             for tool_call in tool_calls:
