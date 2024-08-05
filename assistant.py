@@ -1,32 +1,27 @@
-from llama_cpp import Llama
-import json
-import sys
 import pprint
-import handlers
-from llama_cpp.llama_tokenizer import LlamaHFTokenizer
+import json
+
 from openai import OpenAI
+
+import handlers
 
 pp = pprint.PrettyPrinter(indent=2)
 
 
+def get_json(obj):
+    return json.loads(
+        json.dumps(obj, default=lambda o: getattr(o, '__dict__', str(o)))
+    )
+
+
 class Assistant:
     def __init__(self, init_context):
-        self.client = OpenAI(base_url="http://localhost:8000/v1", api_key="sk-xxx")
+        # self.client = OpenAI(base_url="http://localhost:8000/v1", api_key="sk-xxx")
+        self.client = OpenAI()
 
         json_text = open("functions.json", "r").read()
 
         self.functions = json.loads(json_text)
-
-        #self.llm = Llama(
-        #        model_path="models/Meta-Llama-3.1-8B-Instruct-Q5_K_M.gguf",
-        #        n_ctx=4096,
-        #        n_gpu_layers=35,
-        #        chat_format="llama-3",
-        #        tokenizer=LlamaHFTokenizer.from_pretrained(
-        #            "meta-llama/Meta-Llama-3.1-8B-Instruct"),
-        #        verbose=True)
-
-
         self.function_calls = {}
         self.init_context = init_context
 
@@ -39,21 +34,18 @@ class Assistant:
         all_messages = list(self.messages)
 
         result = self.client.chat.completions.create(
-                messages=all_messages,
-                model="functionary-2.5",
-                tools=self.functions,
-                tool_choice="auto",
-                )
-
-        print(f"****Entire result is {result}")
-        print(result.choices[0].message)
+            messages=all_messages,
+            model="gpt-4o",
+            tools=self.functions,
+            tool_choice="auto",
+        )
 
         return result.choices[0].message
 
     def confirm(self, func_id, data=""):
         func_call = self.function_calls[func_id]
-        func_name = func_call["function"]["name"]
-        func_param = func_call["function"]["arguments"]
+        func_name = func_call.function.name
+        func_param = func_call.function.arguments
 
         result = None
 
@@ -80,8 +72,12 @@ class Assistant:
                 result = data
 
         # self.messages.append(
-                #     {"role": "tool", "tool_call_id": func_id, "name": func_name, "content": result})
-        self.messages.append({"role": "function", "tool_call_id": func_id, "name": func_name, "content": str(result)})
+        #     {"role": "tool", "tool_call_id": func_id, "name": func_name, "content": result})
+        self.messages.append({
+            "role": "tool",
+            "tool_call_id": func_id,
+            "name": func_name,
+            "content": str(result)})
 
         del self.function_calls[func_id]
 
@@ -91,34 +87,42 @@ class Assistant:
 
         pp.pprint(self.messages)
 
-        inference = self.run_inference()
+        message = self.run_inference()
 
-        print("***Inference", inference)
-        pp.pprint(self.messages)
+        print("***Inference", message)
 
         tool_calls = None
 
-        if 'tool_calls' in inference:
-            tool_calls = inference['tool_calls']
+        if message.tool_calls and len(message.tool_calls) > 0:
+            tool_calls = message.tool_calls
 
         if tool_calls:
             for tool_call in tool_calls:
-                tool_id = tool_call["id"]
+                tool_id = tool_call.id
                 self.function_calls[tool_id] = tool_call
-                func_name = tool_call["function"]["name"]
+                func_name = tool_call.function.name
 
                 # Auto validate all get functions
                 if "get" in func_name:
                     print("Autovalidating message")
+                    self.messages.append(get_json(message))
                     self.confirm(tool_id)
                     self.generate_message(send_client_callback)
                 else:
                     print("Message needs validation")
                     send_client_callback(
-                            {"role": "system-confirm", "content": inference["content"], "function": tool_call["function"],
-                             "tool_id": tool_id})
+                        {"role": "system-confirm",
+                         "content": message.content,
+                         "function": {"name": tool_call.function.name,
+                                      "arguments": tool_call.function.arguments},
+                         "tool_id": tool_id}
+                    )
+                    self.messages.append(get_json(message))
         else:
             print("No tool calls")
-            send_client_callback(inference)
-
-        self.messages.append(inference)
+            inference_to_json = {"role": "assistant", "content": message.content}
+            if inference_to_json:
+                self.messages.append(inference_to_json)
+            send_client_callback(
+                inference_to_json
+            )

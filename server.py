@@ -11,30 +11,29 @@ sio = socketio.Server(cors_allowed_origins='*')
 app = socketio.WSGIApp(sio, static_files={
     '/': {'content_type': 'text/html', 'filename': 'index.html'},
     '/styles.css': {'content_type': 'text/css', 'filename': 'styles.css'}
-    })
+})
 
 current_user = 'aleksandar.kirilov@proxym.fr'
 
 projects = handlers.get_projects_for_user(
-        '{"email": "'+current_user+'"}')
-
+    '{"email": "' + current_user + '"}')
 
 context = [
-        {"role": "system", "content":
-         f"""Current date is: {date.today()}
-         Holidays: ["2024-01-01"]'
+    {"role": "system",
+     "content":
+        f"""
+Current date is: {date.today()}
+Holidays: ["2024-01-01"]'
 
-         Currently connected user is '{current_user}'
+Currently connected user is '{current_user}'
 
-         User's assigned project {projects}
-
-         This program helps user fill in their monthly activity reports. Each activity
-         report is associated to a project that user has worked on. Activities can be
-         reported in increments of 25% per day. A single day cannot have more than 100% of
-         reported time - this includes activities and absences.
+This program helps user fill in their monthly activity reports. Each activity
+report is associated to a project that user has worked on. Activities can be
+reported in increments of 25% per day. A single day cannot have more than 100% of
+ reported time - this includes activities and absences.
          """
-         },
-        ]
+     },
+]
 
 assistant = Assistant(context)
 
@@ -42,10 +41,10 @@ assistant = Assistant(context)
 def send_client_callback(message):
     print("Callback called", message)
 
-    if message.role == "system-confirm":
-        sio.emit('system-confirm', message.__dict__)
+    if message["role"] == "system-confirm":
+        sio.emit('system-confirm', {"response": message})
     else:
-        sio.emit('assistant-message', message.__dict__)
+        sio.emit('assistant-message', {"response": message})
 
 
 @sio.event

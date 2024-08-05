@@ -11,3 +11,4 @@ CMAKE_ARGS="-DGGML_CUDA=on" FORCE_CMAKE=1 pip install \
   llama-cpp-python
 
 
+CMAKE_ARGS="-DGGML_CUDA=on" FORCE_CMAKE=1 pip install --upgrade --no-cache --force-reinstall  'llama-cpp-python==0.2.85' 'llama-cpp-python[server]==0.2.85'

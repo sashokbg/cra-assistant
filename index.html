@@ -83,7 +83,7 @@
 
       socket.on("assistant-message", (data) => {
         console.log("assistant message received", data);
-        messages.push({role: "assistant", "content": data.content})
+        messages.push({role: "assistant", content: data.response.content})
         updateBoard("board", messages);
       });
 
@@ -91,10 +91,10 @@
         console.log("confirm request received", data);
         messages.push({
           role: "system",
-          "action": data.function.name,
-          content: data.content,
-          function: JSON.parse(data.function.arguments),
-          tool_id: data.tool_id
+          "action": data.response.function.name,
+          content: data.response.content,
+          function: JSON.parse(data.response.function.arguments),
+          tool_id: data.response.tool_id
         })
         updateBoard("board", messages);
       });
